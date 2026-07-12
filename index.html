@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lotería Texas — Analizador</title>
+<style>
+  :root {
+    --page: #f9f9f7; --surface: #fcfcfb;
+    --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+    --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,.10);
+    --blue: #2a78d6; --blue-strong: #184f95;
+    --gold: #eda100; --red: #e34948;
+    --seq-1:#cde2fb; --seq-2:#9ec5f4; --seq-3:#6da7ec; --seq-4:#3987e5;
+    --seq-5:#256abf; --seq-6:#184f95; --seq-7:#0d366b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --page: #0d0d0d; --surface: #1a1a19;
+      --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+      --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,.10);
+      --blue: #3987e5; --blue-strong: #86b6ef;
+      --gold: #c98500; --red: #e66767;
+      --seq-1:#104281; --seq-2:#1c5cab; --seq-3:#256abf; --seq-4:#3987e5;
+      --seq-5:#6da7ec; --seq-6:#9ec5f4; --seq-7:#cde2fb;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--page); color: var(--ink);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 24px 20px 60px;
+  }
+  .wrap { max-width: 1020px; margin: 0 auto; }
+  header { display:flex; flex-wrap:wrap; gap:12px; align-items:baseline; justify-content:space-between; margin-bottom:6px; }
+  h1 { font-size: 22px; font-weight: 700; }
+  .updated { color: var(--muted); font-size: 13px; }
+  button {
+    font: inherit; color: var(--ink); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 6px 14px; cursor: pointer;
+  }
+  button:hover { border-color: var(--muted); }
+  button.primary { background: var(--blue); border-color: transparent; color: #fff; font-weight: 600; }
+  .tabs { display:flex; gap:8px; margin: 16px 0 20px; }
+  .tabs button { padding: 8px 18px; font-weight: 600; color: var(--ink-2); }
+  .tabs button.active { color: var(--ink); border-color: var(--blue); box-shadow: inset 0 -2px 0 var(--blue); }
+  .tiles { display:grid; grid-template-columns: repeat(auto-fit, minmax(210px,1fr)); gap:12px; margin-bottom:16px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px 18px; margin-bottom: 16px;
+  }
+  .tile { margin-bottom: 0; }
+  .tile .k { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing:.04em; }
+  .tile .v { font-size: 24px; font-weight: 700; margin-top: 4px; }
+  .tile .sub { color: var(--ink-2); font-size: 13px; }
+  h2 { font-size: 15px; font-weight: 600; margin-bottom: 2px; }
+  .desc { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
+  .scroll { overflow-x: auto; }
+  svg text { font: 10px system-ui, sans-serif; fill: var(--muted); }
+  svg .val { fill: var(--ink-2); font-weight: 600; }
+  /* bolas */
+  .balls { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .ball {
+    width: 34px; height: 34px; border-radius: 50%;
+    display:inline-flex; align-items:center; justify-content:center;
+    background: var(--page); border: 1px solid var(--axis);
+    font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums;
+  }
+  .ball.sm { width: 26px; height: 26px; font-size: 12px; }
+  .ball.mm { background: var(--gold); border-color: transparent; color: #0b0b0b; }
+  .ball.pb { background: var(--red); border-color: transparent; color: #fff; }
+  .ticket { display:flex; gap:6px; align-items:center; padding: 8px 0; border-bottom: 1px solid var(--grid); }
+  .ticket:last-child { border-bottom: 0; }
+  .ticket .plus { color: var(--muted); margin: 0 4px; }
+  .gen-controls { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom: 8px; }
+  select {
+    font: inherit; color: var(--ink); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px;
+  }
+  .pairs-table { width:100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  .pairs-table td, .pairs-table th { padding: 6px 10px; border-bottom: 1px solid var(--grid); text-align:left; font-size:14px; }
+  .pairs-table th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing:.04em; }
+  .bar-inline { height: 8px; border-radius: 4px; background: var(--blue); display:inline-block; vertical-align:middle; }
+  #tip {
+    position: fixed; pointer-events: none; z-index: 10; display: none;
+    background: var(--ink); color: var(--page);
+    padding: 5px 9px; border-radius: 6px; font-size: 12.5px; font-weight: 600;
+    box-shadow: 0 2px 10px rgba(0,0,0,.25); white-space: nowrap;
+  }
+  .disclaimer {
+    margin-top: 24px; padding: 12px 16px; border-radius: 10px;
+    border: 1px solid var(--border); color: var(--ink-2); font-size: 13.5px;
+    background: var(--surface);
+  }
+  .status { font-size: 13px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>🎰 Lotería Texas — Analizador</h1>
+      <div class="updated" id="updated">Cargando…</div>
+    </div>
+    <div class="status">Datos renovados a diario de forma automática</div>
+  </header>
+
+  <div class="tabs">
+    <button data-game="megamillions" class="active">Mega Millions</button>
+    <button data-game="powerball">Powerball</button>
+  </div>
+
+  <div class="tiles" id="tiles"></div>
+
+  <div class="card">
+    <h2>🎟️ Generador de boletos</h2>
+    <div class="desc">Combinaciones basadas en el histórico de la era de reglas actual.</div>
+    <div class="gen-controls">
+      <select id="gen-strategy">
+        <option value="pairs">Afinidad de pares concurrentes</option>
+        <option value="hot">Números calientes</option>
+        <option value="cold">Números fríos</option>
+        <option value="weighted">Ponderado por frecuencia</option>
+      </select>
+      <select id="gen-n">
+        <option>3</option><option selected>5</option><option>10</option>
+      </select>
+      <button class="primary" id="btn-gen">Generar</button>
+    </div>
+    <div id="tickets"></div>
+  </div>
+
+  <div class="card">
+    <h2>Frecuencia por número (bolas blancas)</h2>
+    <div class="desc" id="freq-desc"></div>
+    <div class="scroll" id="chart-freq"></div>
+  </div>
+
+  <div class="card" style="display:grid; grid-template-columns: 1fr; gap:0;">
+    <h2>Pares con mayor concurrencia</h2>
+    <div class="desc">Cuántas veces han salido juntos en el mismo sorteo.</div>
+    <div style="display:flex; flex-wrap:wrap; gap:24px;">
+      <div style="flex:1 1 320px; min-width:280px;">
+        <table class="pairs-table" id="top-pairs"></table>
+      </div>
+      <div style="flex:2 1 480px; min-width:320px;" class="scroll">
+        <div class="desc" style="margin-bottom:4px;">Mapa de calor de todas las parejas (más oscuro = más concurrencia)</div>
+        <div id="chart-heat"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 id="special-title"></h2>
+    <div class="desc" id="special-desc"></div>
+    <div class="scroll" id="chart-special"></div>
+  </div>
+
+  <div class="disclaimer">
+    ⚠️ <strong>Aviso honesto:</strong> cada sorteo es un evento independiente — los números
+    frecuentes del pasado no tienen mayor probabilidad de salir en el futuro. Este portal es
+    estadística descriptiva y entretenimiento; no mejora tus probabilidades reales de ganar.
+    Juega con moderación.
+  </div>
+</div>
+
+<div id="tip"></div>
+
+<script>
+let DATA = null;
+let GAME = 'megamillions';
+const $ = s => document.querySelector(s);
+const isDark = () => matchMedia('(prefers-color-scheme: dark)').matches;
+const SEQ = () => ['--seq-1','--seq-2','--seq-3','--seq-4','--seq-5','--seq-6','--seq-7']
+  .map(v => getComputedStyle(document.documentElement).getPropertyValue(v).trim());
+
+const fmtDate = iso => new Date(iso + 'T12:00:00').toLocaleDateString('es-MX', {day:'numeric', month:'short', year:'numeric'});
+
+/* ---------- tooltip ---------- */
+const tip = $('#tip');
+document.addEventListener('mouseover', e => {
+  const t = e.target.closest('[data-tip]');
+  if (t) { tip.textContent = t.dataset.tip; tip.style.display = 'block'; }
+  else tip.style.display = 'none';
+});
+document.addEventListener('mousemove', e => {
+  tip.style.left = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 8) + 'px';
+  tip.style.top = (e.clientY - 34) + 'px';
+});
+
+/* ---------- gráfica de barras SVG ---------- */
+function barChart(data, {color, highlight = new Set(), hlColor, labelEvery = 5, h = 230, name, bw = 10, gap = 3}) {
+  const mL = 34, mB = 20, mT = 16;
+  const W = mL + data.length * (bw + gap) + 8;
+  const max = Math.max(...data.map(d => d[1]));
+  const yMax = Math.ceil(max / 20) * 20 || 10;
+  const ploth = h - mB - mT;
+  const y = v => mT + ploth * (1 - v / yMax);
+  let s = `<svg width="${W}" height="${h}" role="img" aria-label="${name}">`;
+  for (const g of [0, yMax / 2, yMax]) {
+    s += `<line x1="${mL-4}" x2="${W-4}" y1="${y(g)}" y2="${y(g)}" stroke="var(--grid)" stroke-width="1"/>`;
+    s += `<text x="${mL-8}" y="${y(g)+3}" text-anchor="end">${g}</text>`;
+  }
+  const top3 = [...data].sort((a,b)=>b[1]-a[1]).slice(0,3).map(d=>d[0]);
+  data.forEach(([n, c], i) => {
+    const x = mL + i * (bw + gap);
+    const yy = y(c), hh = y(0) - yy;
+    const fill = highlight.has(n) ? hlColor : color;
+    const r = Math.min(4, hh);
+    s += `<path d="M${x},${y(0)} L${x},${yy+r} Q${x},${yy} ${x+r},${yy} L${x+bw-r},${yy} Q${x+bw},${yy} ${x+bw},${yy+r} L${x+bw},${y(0)} Z"
+          fill="${fill}" data-tip="Número ${n}: ${c} veces"/>`;
+    if (top3.includes(n)) s += `<text class="val" x="${x+bw/2}" y="${yy-4}" text-anchor="middle">${c}</text>`;
+    if (n % labelEvery === 0 || labelEvery === 1)
+      s += `<text x="${x+bw/2}" y="${h-6}" text-anchor="middle">${n}</text>`;
+  });
+  s += `<line x1="${mL-4}" x2="${W-4}" y1="${y(0)}" y2="${y(0)}" stroke="var(--axis)" stroke-width="1"/>`;
+  return s + '</svg>';
+}
+
+/* ---------- heatmap de pares ---------- */
+function heatmap(pairs, maxN) {
+  const cell = 8, mL = 26, mT = 6, mB = 20;
+  const W = mL + maxN * cell + 6, H = mT + maxN * cell + mB;
+  const maxC = Math.max(...pairs.map(p => p[2]));
+  const ramp = SEQ();
+  const lookup = {};
+  pairs.forEach(([a, b, c]) => lookup[a + '-' + b] = c);
+  let s = `<svg width="${W}" height="${H}" role="img" aria-label="Mapa de calor de pares">`;
+  for (let a = 1; a < maxN; a++) {
+    for (let b = a + 1; b <= maxN; b++) {
+      const c = lookup[a + '-' + b] || 0;
+      const fill = c === 0 ? 'var(--grid)' : ramp[Math.min(6, Math.floor(c / maxC * 6.999))];
+      const op = c === 0 ? 0.35 : 1;
+      s += `<rect x="${mL+(b-1)*cell}" y="${mT+(a-1)*cell}" width="${cell-1}" height="${cell-1}"
+            rx="1.5" fill="${fill}" opacity="${op}" data-tip="${a} + ${b}: ${c} ${c===1?'vez':'veces'} juntos"/>`;
+    }
+  }
+  for (let n = 5; n <= maxN; n += 5) {
+    s += `<text x="${mL-4}" y="${mT+(n-1)*cell+7}" text-anchor="end">${n}</text>`;
+    s += `<text x="${mL+(n-1)*cell+4}" y="${H-6}" text-anchor="middle">${n}</text>`;
+  }
+  return s + '</svg>';
+}
+
+/* ---------- render ---------- */
+function render() {
+  const g = DATA.games[GAME];
+  const freq = g.white_freq;
+  const sorted = [...freq].sort((a,b) => b[1]-a[1]);
+  const hotSet = new Set(sorted.slice(0,10).map(d => d[0]));
+  const topPair = g.top_pairs[0];
+  const topSpecial = [...g.special_freq].sort((a,b) => b[1]-a[1])[0];
+  const specialClass = GAME === 'megamillions' ? 'mm' : 'pb';
+  const specialColor = GAME === 'megamillions' ? 'var(--gold)' : 'var(--red)';
+
+  $('#updated').textContent =
+    `Datos oficiales de Texas Lottery · actualizado ${new Date(DATA.updated).toLocaleString('es-MX')}`;
+
+  $('#tiles').innerHTML = `
+    <div class="card tile"><div class="k">Sorteos analizados</div>
+      <div class="v">${g.draws.toLocaleString()}</div>
+      <div class="sub">era actual, desde ${fmtDate(g.white_era)}</div></div>
+    <div class="card tile"><div class="k">Último sorteo · ${fmtDate(g.last_date)}</div>
+      <div class="balls" style="margin-top:8px;">
+        ${g.last_draw.whites.map(n=>`<span class="ball sm">${n}</span>`).join('')}
+        <span class="ball sm ${specialClass}">${g.last_draw.special}</span>
+      </div></div>
+    <div class="card tile"><div class="k">Par más concurrente</div>
+      <div class="v">${topPair[0]} + ${topPair[1]}</div>
+      <div class="sub">${topPair[2]} veces juntos</div></div>
+    <div class="card tile"><div class="k">${g.special_name} más frecuente</div>
+      <div class="v">${topSpecial[0]}</div>
+      <div class="sub">${topSpecial[1]} veces desde ${fmtDate(g.special_era)}</div></div>`;
+
+  $('#freq-desc').textContent =
+    `${g.draws} sorteos desde ${fmtDate(g.white_era)} — los 10 más frecuentes en azul oscuro. Pasa el cursor para ver detalles.`;
+  $('#chart-freq').innerHTML = barChart(freq, {
+    color: 'var(--blue)', hlColor: 'var(--blue-strong)', highlight: hotSet,
+    labelEvery: 5, name: 'Frecuencia de bolas blancas'});
+
+  const maxPairC = g.top_pairs[0][2];
+  $('#top-pairs').innerHTML =
+    '<tr><th>Par</th><th>Juntos</th><th></th></tr>' +
+    g.top_pairs.map(([a,b,c]) =>
+      `<tr><td><strong>${a} + ${b}</strong></td><td>${c}×</td>
+       <td style="width:45%"><span class="bar-inline" style="width:${c/maxPairC*100}%"></span></td></tr>`
+    ).join('');
+  $('#chart-heat').innerHTML = heatmap(g.pairs, g.white_max);
+
+  $('#special-title').textContent = `Frecuencia de ${g.special_name}`;
+  $('#special-desc').textContent =
+    `${g.special_draws} sorteos desde ${fmtDate(g.special_era)}` +
+    (GAME === 'megamillions' ? ' (nueva Mega Ball 1–24 desde abril 2025)' : '');
+  $('#chart-special').innerHTML = barChart(g.special_freq, {
+    color: specialColor, hlColor: specialColor, labelEvery: 1, h: 200,
+    bw: 18, gap: 7, name: 'Frecuencia de ' + g.special_name});
+}
+
+/* ---------- generador (100% en el navegador) ---------- */
+function weightedSample(freqMap, pool, k) {
+  const chosen = [];
+  pool = [...pool];
+  while (chosen.length < k && pool.length) {
+    const weights = pool.map(n => (freqMap.get(n) || 0) + 1);
+    let r = Math.random() * weights.reduce((a, b) => a + b, 0);
+    let i = 0;
+    while ((r -= weights[i]) > 0 && i < weights.length - 1) i++;
+    chosen.push(pool[i]);
+    pool.splice(i, 1);
+  }
+  return chosen.sort((a, b) => a - b);
+}
+
+function sampleN(arr, k) {
+  const pool = [...arr], out = [];
+  while (out.length < k && pool.length)
+    out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+  return out.sort((a, b) => a - b);
+}
+
+function makeTicket(g, strategy, maps) {
+  const {freqMap, pairMap, sortedDesc} = maps;
+  const range = Array.from({length: g.white_max}, (_, i) => i + 1);
+  let whites;
+  if (strategy === 'hot') whites = sampleN(sortedDesc.slice(0, 20), 5);
+  else if (strategy === 'cold') whites = sampleN(sortedDesc.slice(-20), 5);
+  else if (strategy === 'weighted') whites = weightedSample(freqMap, range, 5);
+  else { // pairs: afinidad de concurrencia
+    const chosen = [sortedDesc[Math.floor(Math.random() * 15)]];
+    while (chosen.length < 5) {
+      const scores = range.filter(n => !chosen.includes(n)).map(n => [n,
+        chosen.reduce((s, c) => s + (pairMap.get(Math.min(n,c) + '-' + Math.max(n,c)) || 0), 0)]);
+      scores.sort((a, b) => b[1] - a[1]);
+      chosen.push(scores[Math.floor(Math.random() * 5)][0]);
+    }
+    whites = chosen.sort((a, b) => a - b);
+  }
+  const specialMap = new Map(g.special_freq);
+  const special = weightedSample(specialMap,
+    Array.from({length: g.special_max}, (_, i) => i + 1), 1)[0];
+  return {whites, special};
+}
+
+function generate() {
+  const g = DATA.games[GAME];
+  const strategy = $('#gen-strategy').value, n = +$('#gen-n').value;
+  const maps = {
+    freqMap: new Map(g.white_freq),
+    pairMap: new Map(g.pairs.map(([a, b, c]) => [a + '-' + b, c])),
+    sortedDesc: [...g.white_freq].sort((a, b) => b[1] - a[1]).map(d => d[0]),
+  };
+  const tickets = [], seen = new Set();
+  let guard = 0;
+  while (tickets.length < n && guard++ < n * 20) {
+    const t = makeTicket(g, strategy, maps);
+    const key = t.whites.join(',') + '+' + t.special;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    tickets.push(t);
+  }
+  const cls = GAME === 'megamillions' ? 'mm' : 'pb';
+  $('#tickets').innerHTML = tickets.map(t => `
+    <div class="ticket">
+      ${t.whites.map(w => `<span class="ball">${w}</span>`).join('')}
+      <span class="plus">+</span><span class="ball ${cls}">${t.special}</span>
+    </div>`).join('');
+}
+
+async function loadStats() {
+  DATA = await (await fetch('stats.json')).json();
+  render();
+}
+
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.tabs button').forEach(x => x.classList.remove('active'));
+  b.classList.add('active');
+  GAME = b.dataset.game;
+  render();
+  $('#tickets').innerHTML = '';
+});
+$('#btn-gen').onclick = generate;
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', render);
+
+loadStats().then(generate);
+</script>
+</body>
+</html>

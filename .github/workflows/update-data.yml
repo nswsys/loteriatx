@@ -1,0 +1,33 @@
+name: Actualizar datos de lotería
+
+on:
+  schedule:
+    # Diario a las 10:30 UTC (~4:30 am hora de Texas), después de los sorteos nocturnos
+    - cron: "30 10 * * *"
+  workflow_dispatch: {}   # permite dispararlo a mano desde la pestaña Actions
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Descargar y recalcular estadísticas
+        run: python build_stats.py
+
+      - name: Commit si hay cambios
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add stats.json
+          git diff --staged --quiet || {
+            git commit -m "Actualizar datos $(date -u +%Y-%m-%d)"
+            git push
+          }
